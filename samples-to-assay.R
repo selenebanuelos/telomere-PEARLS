@@ -23,7 +23,7 @@ reruns_missing <- rename(reruns_missing,
 # merge data on reruns, missingness, and DNA quality into one dataframe
 merged <- dna_qc %>%
   filter(visitnum == 5) %>%
-  select(specimenid, pearls_id, dna_pure, dna_conc_5) %>%
+  select(specimenid, pearls_id, visitnum, dna_pure, dna_conc_5) %>%
   left_join(.,
             reruns_missing,
             by = c("pearls_id", "specimenid")
@@ -40,7 +40,8 @@ data_type <- sapply(merged, class)
 # variable descriptions
 descriptions <- c("Sample ID",
                   "Participant PEARLS ID",
-                  "Nanodrop: 1.7 <= 260/280 <= 2.0",
+                  "Timepoint",
+                  "At least 1 Nanodrop measurement within range: 1.7 <= 260/280 <= 2.0",
                   "At least 5ng/ul of DNA",
                   "Telomere data available",
                   "Sample assayed more than once"
@@ -49,6 +50,7 @@ descriptions <- c("Sample ID",
 # possible values for variables
 values <- c("3 digit integer",
             "4 digit integer with 'P' prefix",
+            "5",
             "1 = yes, 0 = no, NA = no nanodrop data",
             "1 = yes, 0 = no, NA = no concentration data",
             "1 = yes, 0 = no",
