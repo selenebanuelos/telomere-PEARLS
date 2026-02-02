@@ -5,7 +5,6 @@
 
 # setup
 library(dplyr)
-library(datadictionary) # create data dictionary
 
 # import data
 ################################################################################
@@ -31,19 +30,37 @@ merged <- dna_qc %>%
             )
 
 # create data dictionary
+################################################################################
+# variable names
+var_names <- names(merged)
+
+# data types
+data_type <- sapply(merged, class)
+
 # variable descriptions
-descriptions <- c(specimenid = "Sample ID",
-                  pearls_id = "Participant PEARLS ID",
-                  dna_pure = "Nanodrop: 1.7 <= 260/280 <= 2.0, 1 = yes, 0 = no, NA = no nanodrop data",
-                  dna_conc_5 = "At least 5ng/ul of DNA, 1 = yes, 0 = no, NA = no concentration data",
-                  tel_data = "Telomere data available, 1 = yes, 0 = no",
-                  rerun = "Sample assayed more than once, 1 = yes, 0 = no"
+descriptions <- c("Sample ID",
+                  "Participant PEARLS ID",
+                  "Nanodrop: 1.7 <= 260/280 <= 2.0",
+                  "At least 5ng/ul of DNA",
+                  "Telomere data available",
+                  "Sample assayed more than once"
                   )
 
-dict <- create_dictionary(merged,
-                          var_labels = descriptions
-                          ) %>%
-  select(item, label, class)
+# possible values for variables
+values <- c("3 digit integer",
+            "4 digit integer with 'P' prefix",
+            "1 = yes, 0 = no, NA = no nanodrop data",
+            "1 = yes, 0 = no, NA = no concentration data",
+            "1 = yes, 0 = no",
+            "1 = yes, 0 = no"
+            )
+            
+# create dictionary
+dict <- data.frame(var_names, 
+                   data_type, 
+                   descriptions, 
+                   values,
+                   row.names = NULL)
 
 # output 
 ################################################################################
