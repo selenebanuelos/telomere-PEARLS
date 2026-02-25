@@ -23,11 +23,12 @@ reruns_missing <- rename(reruns_missing,
 # merge data on reruns, missingness, and DNA quality into one dataframe
 merged <- dna_qc %>%
   filter(visitnum == 5) %>%
-  select(specimenid, pearls_id, visitnum, dna_pure, dna_conc_5) %>%
+  select(specimenid, pearls_id, visitnum, os_dna_conc, dna_pure, dna_conc_5) %>%
   left_join(.,
             reruns_missing,
             by = c("pearls_id", "specimenid")
-            )
+            ) %>%
+  rename(dna_conc = os_dna_conc)
 
 # create data dictionary
 ################################################################################
@@ -41,6 +42,7 @@ data_type <- sapply(merged, class)
 descriptions <- c("Sample ID",
                   "Participant PEARLS ID",
                   "Timepoint",
+                  "DNA concentration (ng/ul)",
                   "At least 1 Nanodrop measurement within range: 1.7 <= 260/280 <= 2.0",
                   "At least 5ng/ul of DNA",
                   "Telomere data available",
@@ -51,6 +53,7 @@ descriptions <- c("Sample ID",
 values <- c("3 digit integer",
             "4 digit integer with 'P' prefix",
             "5",
+            "Number >= 0",
             "1 = yes, 0 = no, NA = no nanodrop data",
             "1 = yes, 0 = no, NA = no concentration data",
             "1 = yes, 0 = no",
@@ -68,8 +71,7 @@ dict <- data.frame(var_names,
 ################################################################################
 write.csv(merged,
           "data-processed/samples-to-assay.csv",
-          row.names = FALSE
-)
+          row.names = FALSE)
 
 write.csv(dict,
           "data-processed/samples-to-assay-dictionary.csv",
