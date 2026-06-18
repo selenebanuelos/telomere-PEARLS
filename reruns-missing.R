@@ -1,83 +1,86 @@
 ## Author: Selene Banuelos
 ## Date: 11/25/2025
-## Description: Identify timepoint 5 participants that have buccual telomere 
-## data and those who were assayed more than once
+## Description: Identify timepoint 5 participants that have buccal telomere 
+## probe data and those who were assayed more than once
 
 # setup 
 library(dplyr)
 library(stringr)
+library(purrr)
 
-# import data 
-################################################################################
-# save raw data file names as list
-file_names <- list.files(path = 'data-raw/t5/',
+# import data ------------------------------------------------------------------
+# save telomere raw data file names as list
+run1_names <- list.files(path = 'data-raw/t5-buccal/run1/',
+                         pattern = '.csv',
+                         full.names = TRUE)
+
+run2_names <- list.files(path = 'data-raw/t5-buccal/run2-tel/',
                          pattern = '.csv',
                          full.names = TRUE)
 
 # import all raw data files and combine into one dataframe
-raw_data <- purrr::map_dfr(file_names, 
+run1_data <- map_dfr(run1_names, 
                    # import .csv as df and add column with original file name
-                   function(x) read.csv(x) %>% mutate(file_name = x)
-                   )
+                   function(x) read.csv(x) %>% mutate(file_name = x, run = 1))
 
-# import master list of all T5 participants with buccal samples
+run2_data <- map_dfr(run2_names, 
+                     # import .csv as df and add column with original file name
+                     function(x) read.csv(x) %>% mutate(file_name = x, run = 2))
+
+# import master list of all T5 participants with buccal DNA samples
 all_t5 <- read.csv('data-raw/PEARLSBio-T5sWithBuccal_DATA_2025-12-02_1043.csv')
 
-# data wrangling
-################################################################################
-clean_data <- raw_data %>%
+# data wrangling ---------------------------------------------------------------
+avail_data <- rbind(run1_data, run2_data) %>%
   # create batch column (rundate_plate)
   mutate(batch = str_extract(
     file_name, 
     '(?<=TEL_)(.*)(?= - Quant)') # (?<=prefix)(keep)(?=suffix)
     ) %>%
-  select(c(Sample, Content, batch, contains('Cq'))) %>%
-  # remove any rows corresponding to controls: Content = 'Std', 'Ctrl', 'NTC'
-  filter(
-    str_detect(Content, # column to filter on
-                        "Std|Ctrl|NTC", 
-                        negate = TRUE # keep rows that don't have these strings
-                        )
-  ) %>%
+  select(Sample, Well, Content, batch, run, contains('Cq')) %>%
+  # remove standards, positive controls, no template controls
+  filter(!grepl('Std|Pos Ctrl|NTC', Content)) %>%
   # strip any leading zeros from sample names
-  mutate(Sample = str_remove(
-    Sample,
-    '^0+') # match any number of zeros at the beginning of a string
-    )
+  mutate(Sample = str_remove(Sample,'^0+'))
 
-# identify reruns 
-reruns <- clean_data %>%
+# identify reruns with batch names
+rerun_ids <- avail_data %>%
   group_by(Sample) %>%
-  filter(n_distinct(batch) >1) %>% # keep samples that were run in > 1 batch
-  distinct(Sample, batch)
-
-# get specimen IDs of all samples assayed
-assayed_ids <- unique(clean_data$Sample)
-
-# get specimen IDs of all samples run more than once
-rerun_ids <- unique(reruns$Sample)
-
-# identify which participants were not assayed at all
-missing <- all_t5 %>%
-  # create indicator var "tel_data", where 1 = data available, 0 = no data
-  mutate(tel_data = case_when(specimenid %in% assayed_ids ~ 1,
-                             .default = 0
-                             )
-         )
+  # keep samples that were run in > 1 batch
+  filter(n_distinct(batch) >1) %>% 
+  # remove triplicates for each sample
+  distinct(Sample, batch) %>%
+  # rename sample ID for joining
+  rename(specimenid = Sample) %>%
+  # create vector of sample names
+  pull(specimenid) %>%
+  # remove triplicates
+  unique(.)
 
 # create dataset with missing data and rerun information
-################################################################################
-reruns_missing <- missing %>%
-  # only keep specimen ID, PEARLS ID, and telomere data columns
-  select(specimenid, subjectid, tel_data) %>%
-  # add in column that indicates if sample was assayed more than once
-  mutate(rerun = case_when(specimenid %in% rerun_ids ~ 1,
-                           .default = 0
-                           )
-         )
+reruns_missing <- avail_data %>%
+  # keep sample IDs and run ID
+  select(Sample, Well, batch, run) %>%
+  # remove triplicates
+  distinct(.) %>%
+  # rename sample for joining
+  rename(specimenid = Sample) %>%
+  # change variable type for joining
+  mutate(specimenid = as.integer(specimenid),
+         # create indicator of available telomere data
+         tel_data = 1) %>%
+  # join all t5 sample data to telomere data availability 
+  right_join(., all_t5, by = 'specimenid') %>%
+  # fill in indicator of available telomere data with 0's for any missing data
+  mutate_at(vars(tel_data), ~replace(., is.na(.), 0)) %>%
+  # fill in indicator of rerun status with 0's for any available telomere data
+  mutate(rerun = case_when(specimenid %in% rerun_ids & tel_data == 1 ~ 1,
+                           !specimenid %in% rerun_ids & tel_data == 1 ~0,
+                           is.na(tel_data) ~ NA)) %>%
+  # rename participant ID for consistency with other datasets
+  rename(pearls_id = subjectid)
 
-# output 
-################################################################################
+# output -----------------------------------------------------------------------
 write.csv(reruns_missing,
-          'data-processed/reruns-missing-T5.csv',
+          'data-processed/reruns-missing-tel-T5.csv',
           row.names = FALSE)
