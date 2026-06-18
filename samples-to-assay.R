@@ -1,5 +1,5 @@
 ## Author: Selene Banuelos
-## Date: 1/30/2025
+## Date: 1/30/2026
 ## Description: Make dataset of T5 PEARLS samples that need to be nanodropped
 ## and/or assayed for telomere length
 
@@ -9,10 +9,10 @@ library(dplyr)
 # import data
 ################################################################################
 # T5 data on samples assayed more than once and samples missing telomere data
-reruns_missing <- read.csv('data-processed/reruns-missing-T5.csv')
+reruns_missing <- read.csv('data-processed/reruns-missing-tel-T5.csv')
 
-# T2 and T5 data on sample DNA quality
-dna_qc <- read.csv('data-processed/dna-qc.csv')
+# T2 and T5 data on buccal DNA quality
+dna_qc <- read.csv('data-processed/buccal-dna-qc.csv')
 
 # data wrangling
 ################################################################################
@@ -22,13 +22,23 @@ reruns_missing <- rename(reruns_missing,
 
 # merge data on reruns, missingness, and DNA quality into one dataframe
 merged <- dna_qc %>%
+  # only look at visit number 5
   filter(visitnum == 5) %>%
-  select(specimenid, pearls_id, visitnum, os_dna_conc, dna_pure, dna_conc_5) %>%
+  # keep the following variables from DNA QC dataset
+  select(specimenid, 
+         pearls_id, 
+         visitnum, 
+         os_dna_conc, 
+         dna_pure, 
+         dna_conc_5,
+         dna_qc_passed) %>%
+  # join rerun and missing information to DNA QC data frame
   left_join(.,
             reruns_missing,
-            by = c("pearls_id", "specimenid")
-            ) %>%
-  rename(dna_conc = os_dna_conc)
+            by = c('pearls_id', 
+                   'specimenid', 
+                   'visitnum', 
+                   'os_dna_conc'))
 
 # create data dictionary
 ################################################################################
