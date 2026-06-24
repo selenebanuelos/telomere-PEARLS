@@ -1,0 +1,264 @@
+---
+title: "Telomere length assay report"
+author: "Selene Banuelos"
+format:
+  html:
+    code-fold: true
+editor: visual
+---
+
+This is a report on telomere length-related data that is currently available for 
+PEARLS participants. For Run 1 and Run 2 of the telomere assay, this report
+contains information about any missing telomere or 36B4 data, DNA quality check,
+and plate contamination for all T5 buccal samples. Recommendations for samples
+to assay next are included at bottom of report. 
+
+## Setup
+
+```{r message = FALSE}
+# load libraries
+library(dplyr)
+library(tidyr)
+
+# import telomere/36B4/buccal DNA QC data
+tel_data <- read.csv('data-processed/merged-runs-tel-36b4.csv')
+
+# telomere data availability
+avail <- read.csv('data-processed/tel-avail-reruns-T5.csv')
+```
+
+## Run 1
+
+### Missing data
+Check if any samples are missing telomere-specific or 364b-specific probe data
+
+```{r}
+avail %>%
+  # check run 1 data
+  filter(run == 1) %>%
+  # look at samples with data available for either telomere or 36B4
+  filter(data_avail == 1) %>%
+  # keep only relevant variables
+  select(specimenid, Target, run, data_avail) %>%
+  # remove triplicatesS
+  distinct(.) %>%
+  # make data wider to check data availability across both probes
+  pivot_wider(id_cols = c('specimenid', 'run'),
+              names_from = Target,
+              names_glue = 'avail_{Target}',
+              values_from = data_avail) %>%
+  # make inidcator of data missing eitehr for telomere or 36B4-specific probes
+  mutate(missing_either = case_when(is.na(avail_TEL) | is.na(avail_36B4) ~ 1,
+                                    .default = 0)
+         ) %>%
+  # check any samples that are missing data in either
+  filter(missing_either == 1) %>%
+  nrow(.)
+```
+
+All samples have data for both probes.
+
+### DNA QC
+
+Generate list of samples that were included in Run 1 but did not pass DNA QC metrics. To pass DNA QC, DNA concentration must be greater than or equal to 5ng/ul and 260/280 ratio between 1.7-2.0.
+
+```{r}
+not_pure1 <- tel_data %>%
+  # select rows from run 1
+  filter(run == 1) %>%
+  # remove standards, positive controls, no template controls
+  filter(!grepl('Std|Pos Ctrl|NTC', Content)) %>%
+  # keep samples that did not pass QC
+  filter(dna_qc_passed == 0) %>%
+  # get vector of sample IDs
+  pull(Sample) %>%
+  # remove triplicates
+  unique(.)
+
+print(not_pure1)
+```
+
+It may be worth checking these samples again on Nanodrop. It appears that these had sufficient DNA concentration but 260/280 ratio does not fall in an acceptable range for DNA or 260/280 ratio is missing. See below:
+
+```{r}
+tel_data %>%
+  # only show samples that did not pass DNA QC
+  filter(Sample %in% not_pure1) %>%
+  # keep only relevant samples
+  select(Sample, os_dna_conc, purity, dna_qc_passed) %>%
+  # remove triplicates
+  distinct(.)
+```
+
+### Contamination
+
+Check if any no template control (NTC) wells in plates included in Run 1 have Cq/Ct value\<35
+
+```{r}
+tel_data %>%
+  # select rows from run 1
+  filter(run == 1) %>%
+  # indicator variable of NTC Cq/Ct value<35
+  filter(ntc_cont == 1) %>%
+  nrow(.)
+```
+
+Looks good, no signs of contamination in Run 1 in either telomere or 36B4 plates.
+
+## Run 2
+
+### Missing data
+Check if any samples are missing telomere-specific or 364b-specific probe data
+
+```{r}
+avail %>%
+  # check run 1 data
+  filter(run == 2) %>%
+  # look at samples with data available for either telomere or 36B4
+  filter(data_avail == 1) %>%
+  # keep only relevant variables
+  select(specimenid, Target, run, data_avail) %>%
+  # remove triplicatesS
+  distinct(.) %>%
+  # make data wider to check data availability across both probes
+  pivot_wider(id_cols = c('specimenid', 'run'),
+              names_from = Target,
+              names_glue = 'avail_{Target}',
+              values_from = data_avail) %>%
+  # make inidcator of data missing eitehr for telomere or 36B4-specific probes
+  mutate(missing_either = case_when(is.na(avail_TEL) | is.na(avail_36B4) ~ 1,
+                                    .default = 0)
+         ) %>%
+  # check any samples that are missing data in either
+  filter(missing_either == 1) %>%
+  nrow(.)
+```
+
+All samples from Run 2 have telomere and 36B4-specific probe data.
+
+### DNA QC
+
+Generate list of samples that were included in Run 2 but did not pass DNA QC metrics. To pass DNA QC, DNA concentration must be greater than or equal to 5ng/ul and 260/280 ratio between 1.7-2.0.
+
+```{r}
+not_pure2 <- tel_data %>%
+  # select rows from run 2 that were not reruns from run 1
+  filter(run == 2 & rerun == 0) %>%
+  # remove standards, positive controls, no template controls
+  filter(!grepl('Std|Pos Ctrl|NTC', Content)) %>%
+  # keep samples that did not pass QC
+  filter(dna_qc_passed == 0) %>%
+  # get vector of sample IDs
+  pull(Sample) %>%
+  # remove triplicates
+  unique(.)
+
+print(not_pure2)
+```
+
+It may be worth checking these samples again on Nanodrop. It appears that these had sufficient DNA concentration but 260/280 ratio does not fall in an acceptable range for DNA or 260/280 ratio is missing. See below:
+
+```{r}
+tel_data %>%
+  # only show samples that did not pass DNA QC
+  filter(Sample %in% not_pure2) %>%
+  # keep only relevant samples
+  select(Sample, os_dna_conc, purity, dna_qc_passed) %>%
+  # remove triplicates
+  distinct(.)
+```
+
+### Contamination
+
+Check if any telomere or 36B4 plates from Run 2 have signs of contamination (Cq/Ct value\<35)
+
+```{r}
+cont_plates <- tel_data %>%
+  # select rows from run 1
+  filter(run == 2) %>%
+  # indicator variable of NTC Cq/Ct value<35
+  filter(ntc_cont == 1) %>%
+  # get vector of file names corresponding to contaminated plates
+  pull(file_name) %>%
+  # remove triplicates
+  unique(.)
+
+print(cont_plates)
+```
+
+`{r} length(cont_plates)` plates have signs of contamination based on the NTC wells.
+
+Get list of samples that were included in these `{r} length(cont_plates)` contaminated plates and check to see if any were also included in Run 1
+
+```{r}
+# get vector of specimen IDs of samples on contaminated plates that were only assayed once
+once <- tel_data %>%
+  # remove standards, positive controls, no template controls
+  filter(!grepl('Std|Pos Ctrl|NTC', Content)) %>%
+  # filter for samples from contaminated plates
+  filter(ntc_cont == 1) %>%
+  # filter for samples run only once
+  filter(rerun == 0) %>%
+  select(Target, Sample, ntc_cont, dna_qc_passed) %>%
+  # remove triplicates
+  distinct(.) %>%
+  # make data wider to check for contamination across telomere and 36B4
+  pivot_wider(id_cols = c('Sample', 'dna_qc_passed'),
+               names_from = Target,
+               names_prefix = 'contaminated_',
+               values_from = ntc_cont)
+
+# get vector of specimen IDs of samples on contaminated plates that were assayed more than once
+rerun <- tel_data %>%
+    # remove standards, positive controls, no template controls
+  filter(!grepl('Std|Pos Ctrl|NTC', Content)) %>%
+  # filter for samples from contaminated plates
+  filter(ntc_cont == 1) %>%
+  # filter for samples that were rerun
+  filter(rerun == 1) %>%
+  select(Target, Sample, ntc_cont, dna_qc_passed) %>%
+  # remove triplicates
+  distinct(.) %>%
+  # make data wider to check for contamination across telomere and 36B4
+  pivot_wider(id_cols = c('Sample', 'dna_qc_passed'),
+               names_from = Target,
+               names_prefix = 'contaminated_',
+               values_from = ntc_cont)
+```
+
+Across all contaminated plates in Run 2, there were `{r} nrow(rerun)` samples that were also included in Run 1. Since Run 1 did not show signs of contamination in any plate, data from that run can be used for these samples.
+
+Across all contaminated plates in Run 2, there were `{r} nrow(once)` samples that were only included in Run 2. From these `{r} nrow(once)` samples:
+
+-    `{r} filter(once, contaminated_TEL == 1 & contaminated_TEL == 1) %>% nrow(.)` had telomere and 36B4 data from contaminated plates
+
+-   `{r} filter(once, is.na(contaminated_TEL) | is.na(contaminated_36B4)) %>% nrow(.)` had only 36B4 data from contaminated plates (telomere data for these samples came from plates with NTC Cq\>35)
+
+## Samples to run next
+
+```{r}
+need_data <- avail %>%
+  # keep samples that weren't included in Runs 1 or 2
+  filter(data_avail == 0) %>%
+  # save vector of specimen ID
+  select(specimenid) %>%
+  distinct(.) %>%
+  pull(specimenid)
+```
+
+### Sample set A 
+The following `{r} length(need_data)` samples were originally selected for Hector to run since they had not been included in either Run 1 or Run 2:
+
+`{r} need_data`
+
+### Sample set B 
+The following `{r} nrow(once)` samples were only included in Run 2 and have telomere and/or 36B4 data from contaminated plates:
+
+`{r} once$Sample`
+
+### Sample set C
+In addition to those samples, you may want to consider re-measuring 260/280 ratios to re-assess purity of the samples below that were already run in either Run 1 or Run 2:
+
+-   `{r} length(not_pure1)` samples from Run 1: `{r} not_pure1`
+
+-   `{r} length(not_pure2)` samples from Run 2: `{r} not_pure2`
